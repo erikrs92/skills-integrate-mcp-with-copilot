@@ -3,6 +3,31 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const loginButton = document.getElementById("login-button");
+  const logoutButton = document.getElementById("logout-button");
+  const loginContainer = document.getElementById("login-container");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  const authStatus = document.getElementById("auth-status");
+  const teacherName = document.getElementById("teacher-name");
+  let teacherToken = localStorage.getItem("teacherToken");
+  let teacherUsername = localStorage.getItem("teacherUsername");
+
+  function authHeaders() {
+    return teacherToken ? { Authorization: `Bearer ${teacherToken}` } : {};
+  }
+
+  function updateAuthUI() {
+    const authenticated = Boolean(teacherToken);
+    loginButton.classList.toggle("hidden", authenticated);
+    authStatus.classList.toggle("hidden", !authenticated);
+    teacherName.textContent = authenticated
+      ? `Signed in as ${teacherUsername}`
+      : "";
+    document.querySelectorAll(".delete-btn").forEach((button) => {
+      button.classList.toggle("hidden", !authenticated);
+    });
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -60,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
+      updateAuthUI();
     } catch (error) {
       activitiesList.innerHTML =
         "<p>Failed to load activities. Please try again later.</p>";
@@ -80,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: authHeaders(),
         }
       );
 
@@ -110,6 +137,54 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  loginButton.addEventListener("click", () => {
+    loginContainer.classList.toggle("hidden");
+    document.getElementById("username").focus();
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await fetch("/auth/logout", {
+      method: "POST",
+      headers: authHeaders(),
+    });
+    teacherToken = null;
+    teacherUsername = null;
+    localStorage.removeItem("teacherToken");
+    localStorage.removeItem("teacherUsername");
+    updateAuthUI();
+    fetchActivities();
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    loginMessage.className = "hidden";
+
+    const response = await fetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+    const result = await response.json();
+
+    if (!response.ok) {
+      loginMessage.textContent = result.detail || "Login failed";
+      loginMessage.className = "error";
+      return;
+    }
+
+    teacherToken = result.token;
+    teacherUsername = result.username;
+    localStorage.setItem("teacherToken", teacherToken);
+    localStorage.setItem("teacherUsername", teacherUsername);
+    loginForm.reset();
+    loginContainer.classList.add("hidden");
+    updateAuthUI();
+    fetchActivities();
+  });
+
   // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -124,6 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: authHeaders(),
         }
       );
 
@@ -156,5 +232,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
+  updateAuthUI();
   fetchActivities();
 });
